@@ -1,0 +1,103 @@
+name: Run Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      # Запуск зависимых сервисов
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: ${{ vars.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ vars.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ vars.POSTGRES_DB }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ${{ vars.POSTGRES_USER }}"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:latest
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      rabbitmq:
+        image: rabbitmq:3.12-management
+        env:
+          RABBITMQ_DEFAULT_USER: ${{ vars.RABBITMQ_DEFAULT_USER }}
+          RABBITMQ_DEFAULT_PASS: ${{ vars.RABBITMQ_DEFAULT_PASS }}
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmqctl status"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      # Чекаут репозитория
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Настройка Python 3.10.11
+      - name: Set up Python 3.10.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10.11'
+
+      # Установка зависимостей
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov
+
+      # Тестирование Django
+      - name: Test Django App
+        run: |
+          cd services/django_app
+          pytest --cov=./app --cov-report=xml
+        env:
+          DATABASE_URL: postgresql://${{ vars.POSTGRES_USER }}:${{ vars.POSTGRES_PASSWORD }}@localhost:5432/${{ vars.POSTGRES_DB }}
+          REDIS_URL: redis://localhost:6379/0
+          BROKER_URL: amqp://${{ vars.RABBITMQ_DEFAULT_USER }}:${{ vars.RABBITMQ_DEFAULT_PASS }}@localhost:5672//
+
+      # Тестирование FastAPI
+      - name: Test FastAPI App
+        run: |
+          cd services/fastapi_app
+          pytest --cov=./app --cov-report=xml
+        env:
+          MONGO_URL: mongodb://localhost:27017/
+
+      # Тестирование Flask
+      - name: Test Flask App
+        run: |
+          cd services/flask_app
+          pytest --cov=./app --cov-report=xml
+        env:
+          REDIS_URL: redis://localhost:6379/0
+
+      # Отправка отчета о покрытии
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./services/django_app/coverage.xml,./services/fastapi_app/coverage.xml,./services/flask_app/coverage.xml
+          fail_ci_if_error: true

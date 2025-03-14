@@ -1,0 +1,45 @@
+name: Deploy to Kubernetes
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Чекаут репозитория
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Настройка kubectl
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      # Настройка Kubeconfig
+      - name: Configure Kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 --decode > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      # Деплой в Kubernetes
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl apply -f k8s/configmaps/
+          kubectl apply -f k8s/secrets/
+          kubectl apply -f k8s/services/
+          kubectl apply -f k8s/statefulsets/
+          kubectl apply -f k8s/deployments/
+          kubectl apply -f k8s/django-ingress.yaml
+          kubectl apply -f k8s/fastapi-ingress.yaml
+          kubectl apply -f k8s/flask-ingress.yaml
+
+      # Проверка статуса деплоя
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment -n default

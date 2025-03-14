@@ -1,0 +1,9 @@
+# Основные настройки
+broker.id: 1
+listeners: PLAINTEXT://:9092
+advertised.listeners: PLAINTEXT://kafka:9092
+listener.security.protocol.map: PLAINTEXT:PLAINTEXT
+zookeeper.connect: ${ZOOKEEPER_HOST}:${ZOOKEEPER_PORT}
+auto.create.topics.enable: true
+log.dirs: /kafka/logs
+num.partitions: 3 
